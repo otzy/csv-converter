@@ -22,6 +22,9 @@ class CsvConverterTest extends TestCase
         $mapping = [
             '2' => 'two',
             '1' => 'one',
+            'concat' => function ($fields, $source_field_index) {
+                return $fields[$source_field_index['one']] . $fields[$source_field_index['two']];
+            },
         ];
 
         $converter = new CsvConverter($source, $target, true, true);

@@ -8,7 +8,11 @@ namespace Otzy\CsvConverter;
  */
 class CsvConverter
 {
+    /**
+     * @var Mapper[]
+     */
     private $mapping = [];
+
     private $source;
     private $target;
     private $source_has_header;
@@ -70,11 +74,14 @@ class CsvConverter
     }
 
     /**
-     * @param array $mapping ['target_field_name' => 'source_field_name']
+     * @param array $mapping ['target_field_name' => 'source_field_name'|source_field_index|callback($row, $source_field_indexes)]
      */
     public function setMapping($mapping)
     {
-        $this->mapping = $mapping;
+        $this->mapping = [];
+        foreach ($mapping as $target_field => $mapped_value) {
+            $this->mapping[$target_field] = new Mapper($mapped_value);
+        }
     }
 
     /**
@@ -116,21 +123,8 @@ class CsvConverter
             }
 
             $target_values = [];
-            foreach ($this->mapping as $target_field => $source_field) {
-                if ($this->source_has_header) {
-                    if (!array_key_exists($source_field, $source_field_index)) {
-                        throw new InvalidSourceHeaderException(
-                            "The mapping is perhaps wrong. Source field $source_field is missing in the source file."
-                        );
-                    }
-                    $target_values[] = $source_values[$source_field_index[$source_field]];
-                } else {
-                    // headless source file. Source fields have numeric index
-                    if (!array_key_exists($source_field, $source_values)) {
-                        throw new InvalidSourceRowException('Source row has invalid number of fields');
-                    }
-                    $target_values[] = $source_values[$source_field];
-                }
+            foreach ($this->mapping as $target_field => $mapper) {
+                $target_values[] = $mapper->map($source_values, $source_field_index);
             }
             $this->fputcsv($target_values);
         }
