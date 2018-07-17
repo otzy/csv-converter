@@ -10,7 +10,9 @@
         }
     ],
     "minimum-stability": "stable",
-    "require": {},
+    "require": {
+        "league/csv": "9.0"
+    },
     "autoload": {
         "psr-4": {
             "Otzy\\CsvConverter\\": "src/"
