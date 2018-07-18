@@ -1,4 +1,4 @@
-#CSV Converter
+# CSV Converter
 Transforms CSV file (or any plain text file with some delimiter) into a file with different set of fields.
 
 Features
@@ -7,17 +7,17 @@ Features
 * Destination fields can be calculated using arbitrary callback functions
 * Simple validity check of the source file header and data rows. CSV Converter checks that the header has exactly the same number and the order of fields that you expect.
 
-##Installation
+## Installation
 
 ```
 composer require otzy/csv-converter
 ```
 
-##CsvConverter class
+## CsvConverter class
 To read source CSV and write to destination CSV the class uses league/csv Reader and Writer.
 Thus you can use reach functionality of league/csv package when you need to read/write using different encodings, BOM, stream filters, etc.
 
-####Mapping
+#### Mapping
 To convert you should first create mapping.
 
 Mapping is an associative array that defines which fields from the source file will be saved to the destination file.
@@ -41,7 +41,7 @@ The mapper above will output 3 fields to the destination:
 
 the third field will be concatenated from fields one and two from the source file.
 
-####CSVConverter usage example
+#### CSVConverter usage example
 ```php
         $mapping = [
             'field two' => 'two',
@@ -81,7 +81,7 @@ the third field will be concatenated from fields one and two from the source fil
         unset($writer);
 ```
 
-####Events
+#### Events
 
 Convert emits 3 types of events
 
