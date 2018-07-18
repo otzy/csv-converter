@@ -1,6 +1,9 @@
 <?php
 
 namespace Otzy\CsvConverter;
+use League\Csv\EncloseField;
+use League\Csv\Reader;
+use League\Csv\Writer;
 
 /**
  * Class CsvConverter
@@ -13,19 +16,9 @@ class CsvConverter
      */
     private $mapping = [];
 
-    private $source;
-    private $target;
     private $source_has_header = true;
     private $target_has_header = true;
     private $valid_source_header;
-
-    private $source_delimiter = ';';
-    private $source_enclosure = '"';
-    private $source_escape = '\\';
-
-    private $target_delimiter = ';';
-    private $target_enclosure = '"';
-    private $target_escape = '\\';
 
     private $row_count_saved = 0;
     private $row_count_processed = 0;
@@ -33,6 +26,8 @@ class CsvConverter
     private $on_row_converted = null;
     private $on_completed = null;
     private $on_before_convert = null;
+
+    private $force_enclosure = false;
 
     /**
      * set this parameter in order to validate that the source file has the same fields as you are expecting for.
@@ -48,19 +43,6 @@ class CsvConverter
         $this->valid_source_header = $valid_source_header;
     }
 
-    public function setSourceFormat($delimiter = ';', $enclosure = '"', $escape = '\\')
-    {
-        $this->source_delimiter = $delimiter;
-        $this->source_enclosure = $enclosure;
-        $this->source_escape = $escape;
-    }
-
-    public function setTargetFormat($delimiter = ';', $enclosure = '"', $escape = '\\')
-    {
-        $this->target_delimiter = $delimiter;
-        $this->target_enclosure = $enclosure;
-        $this->target_escape = $escape;
-    }
 
     /**
      * @param array $mapping ['target_field_name' => 'source_field_name'|source_field_index|callback($row, $source_field_indexes)]
@@ -76,22 +58,22 @@ class CsvConverter
     /**
      * perform conversion
      *
-     * @param resource $source
-     * @param resource $target
+     * @param Reader $reader
+     * @param Writer $writer
      *
      * @throws InvalidSourceHeaderException
      * @throws InvalidSourceRowException
      * @throws \Exception
      */
-    public function convert($source, $target)
+    public function convert(Reader $reader, Writer $writer)
     {
-        $this->source = $source;
-        $this->target = $target;
-
         $source_field_index = [];
         $source_header = [];
         if ($this->source_has_header) {
-            $source_header = $this->fgetcsv();
+            if ($reader->getHeaderOffset() === null) {
+                $reader->setHeaderOffset(0);
+            }
+            $source_header = $reader->getHeader();
             $this->row_count_processed++;
             if (is_array($this->valid_source_header) && !$this->isSourceHeaderValid($source_header)) {
                 throw new InvalidSourceHeaderException('Invalid source file header');
@@ -99,27 +81,30 @@ class CsvConverter
             $source_field_index = array_flip($source_header);
         }
 
+        if ($this->force_enclosure) {
+            EncloseField::addTo($writer, "\t\x1f");
+        }
+
         if ($this->target_has_header) {
-            $this->fputcsv(array_keys($this->mapping));
+            $writer->insertOne(array_keys($this->mapping));
             $this->row_count_saved++;
             if (is_callable($this->on_row_converted)) {
                 call_user_func($this->on_row_converted, $this->row_count_saved, $source_header, array_keys($this->mapping));
             }
         }
 
-        while (!feof($this->source)) {
-            $source_values = $this->fgetcsv();
-            if (!is_array($source_values)) {
-                break;
-            }
+        foreach ($reader->getRecords() as $offset => $record) {
             $this->row_count_processed++;
 
-            if (is_array($this->valid_source_header) && !$this->validateSourceValues($source_values)) {
+            // we need an indexed array actually
+            $record = array_values($record);
+
+            if (is_array($this->valid_source_header) && !$this->validateSourceValues($record)) {
                 throw new InvalidSourceRowException('Malformed row in the source CSV file');
             }
 
             if (is_callable($this->on_before_convert)) {
-                if (call_user_func($this->on_before_convert, $this->row_count_processed, $source_values) === false) {
+                if (call_user_func($this->on_before_convert, $this->row_count_processed, $record) === false) {
                     $this->row_count_skipped++;
                     continue;
                 }
@@ -127,18 +112,29 @@ class CsvConverter
 
             $target_values = [];
             foreach ($this->mapping as $target_field => $mapper) {
-                $target_values[] = $mapper->map($source_values, $source_field_index);
+                $target_values[] = $mapper->map($record, $source_field_index);
             }
-            $this->fputcsv($target_values);
+            $writer->insertOne($target_values);
             $this->row_count_saved++;
             if (is_callable($this->on_row_converted)) {
-                call_user_func($this->on_row_converted, $this->row_count_saved, $source_values, $target_values);
+                call_user_func($this->on_row_converted, $this->row_count_saved, $record, $target_values);
             }
         }
 
         if (is_callable($this->on_completed)) {
             call_user_func($this->on_completed, $this->row_count_saved);
         }
+    }
+
+    /**
+     * by default values are enclosed into enclosure only if they contain spaces, tabs etc.
+     * If you need to enclose all fields into enclosure, set this to true
+     *
+     * @param bool $force
+     */
+    public function forceEnclosure(bool $force)
+    {
+        $this->force_enclosure = $force;
     }
 
     /**
@@ -221,38 +217,5 @@ class CsvConverter
     public function setTargetHasHeader($target_has_header): void
     {
         $this->target_has_header = $target_has_header;
-    }
-
-    /**
-     * fgetcsv wrapper
-     *
-     * @return array|false|null
-     * @throws \Exception
-     */
-    private function fgetcsv()
-    {
-        $result = fgetcsv($this->source, 0, $this->source_delimiter, $this->source_enclosure, $this->source_escape);
-        if ($result === null) {
-            throw new \Exception('Invalid stream handler');
-        }
-
-        return $result;
-    }
-
-    /**
-     * fputcsv wrapper
-     *
-     * @param array $values
-     * @return int
-     * @throws \Exception
-     */
-    private function fputcsv($values)
-    {
-        $result = fputcsv($this->target, $values, $this->target_delimiter, $this->target_enclosure, $this->target_escape);
-        if ($result === false) {
-            throw new \Exception('Failed writing to the target stream');
-        }
-
-        return $result;
     }
 }
