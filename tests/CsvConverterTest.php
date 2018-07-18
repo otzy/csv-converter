@@ -8,6 +8,8 @@
 
 namespace otzy\CsvConverter\Tests;
 
+use League\Csv\Reader;
+use League\Csv\Writer;
 use Otzy\CsvConverter\CsvConverter;
 use PHPUnit\Framework\TestCase;
 
@@ -39,18 +41,49 @@ class CsvConverterTest extends TestCase
         $converter->setMapping(self::$mapping);
         $converter->setSourceHasHeader(true);
         $converter->setTargetHasHeader(true);
-        $converter->setSourceFormat(';', '"', '\\');
-        $converter->setTargetFormat(';', '"', '\\');
         $converter->setValidSourceHeader(['one', 'two', 'three']);
+        $reader = Reader::createFromPath(__DIR__ . '/data/source.csv');
+        $reader->setDelimiter(';');
+        $reader->setEscape('\\');
+        $reader->setEnclosure('"');
 
-        $source = fopen(__DIR__ . '/data/source.csv', 'r');
         $converted_file_name = tempnam(sys_get_temp_dir(), 'csvconverter_test');
-        $target = fopen($converted_file_name, 'w');
-        $converter->convert($source, $target);
-        fclose($source);
-        fclose($target);
+        $writer = Writer::createFromPath($converted_file_name);
 
+        $writer->setDelimiter(';');
+        $writer->setEscape('\\');
+        $writer->setEnclosure('"');
+        $converter->convert($reader, $writer);
+
+        unset($writer);
         $this->assertFileEquals(__DIR__ . '/data/target.csv', $converted_file_name);
+        unlink($converted_file_name);
+    }
+
+    public function testConvertForceEnclosure()
+    {
+        $converter = new CsvConverter();
+        $converter->setMapping(self::$mapping);
+        $converter->setSourceHasHeader(true);
+        $converter->setTargetHasHeader(true);
+        $converter->setValidSourceHeader(['one', 'two', 'three']);
+        $converter->forceEnclosure(true);
+
+        $reader = Reader::createFromPath(__DIR__ . '/data/source.csv');
+        $reader->setDelimiter(';');
+        $reader->setEscape('\\');
+        $reader->setEnclosure('"');
+
+        $converted_file_name = tempnam(sys_get_temp_dir(), 'csvconverter_test');
+        $writer = Writer::createFromPath($converted_file_name);
+
+        $writer->setDelimiter(';');
+        $writer->setEscape('\\');
+        $writer->setEnclosure('"');
+        $converter->convert($reader, $writer);
+
+        unset($writer);
+        $this->assertFileEquals(__DIR__ . '/data/target_force_enclosure.csv', $converted_file_name);
         unlink($converted_file_name);
     }
 
@@ -64,16 +97,21 @@ class CsvConverterTest extends TestCase
 
         // the wrong header ("three" is missing). convert() must throw an exception
         $converter->setValidSourceHeader(['one', 'two']);
+        $reader = Reader::createFromPath(__DIR__ . '/data/source.csv');
+        $reader->setDelimiter(';');
+        $reader->setEscape('\\');
+        $reader->setEnclosure('"');
 
-        $source = fopen(__DIR__ . '/data/source.csv', 'r');
         $converted_file_name = tempnam(sys_get_temp_dir(), 'csvconverter_test');
-        $target = fopen($converted_file_name, 'w');
+        $writer = Writer::createFromPath($converted_file_name);
+
+        $writer->setDelimiter(';');
+        $writer->setEscape('\\');
+        $writer->setEnclosure('"');
+        $converter->convert($reader, $writer);
 
         // Exception must be thrown here
-        $converter->convert($source, $target);
-
-        fclose($source);
-        fclose($target);
+        $converter->convert($reader, $writer);
 
         $this->assertFileEquals(__DIR__ . '/data/target.csv', $converted_file_name);
         unlink($converted_file_name);
@@ -86,16 +124,23 @@ class CsvConverterTest extends TestCase
         $converter->setSourceHasHeader(false);
         $converter->setMapping(self::$mapping_headless);
 
-        $source = fopen(__DIR__ . '/data/source_headerless.csv', 'r');
+        $reader = Reader::createFromPath(__DIR__ . '/data/source_headerless.csv');
+        $reader->setDelimiter(';');
+        $reader->setEnclosure('"');
+        $reader->setEscape('\\');
+        
+        
         $converted_file_name = tempnam(sys_get_temp_dir(), 'csvconverter_test');
-        $target = fopen($converted_file_name, 'w');
+        $writer = Writer::createFromPath($converted_file_name);
+        $writer->setDelimiter(';');
+        $writer->setEnclosure('"');
+        $writer->setEscape('\\');
 
-        $converter->convert($source, $target);
+        $converter->convert($reader, $writer);
 
-        fclose($source);
-        fclose($target);
-
+        unset($writer);
         $this->assertFileEquals(__DIR__ . '/data/target_headerless.csv', $converted_file_name);
+        unlink($converted_file_name);
     }
 
     public function testOnBeforeConvert()
@@ -104,27 +149,31 @@ class CsvConverterTest extends TestCase
         $converter->setMapping(self::$mapping);
         $converter->setSourceHasHeader(true);
         $converter->setTargetHasHeader(true);
-        $converter->setSourceFormat(';', '"', '\\');
-        $converter->setTargetFormat(';', '"', '\\');
-        $converter->setValidSourceHeader(['one', 'two', 'three']);
 
         // skip row that has "a" in the first field
         $converter->onBeforeConvert(function ($row_count, $source_row) {
             if ($source_row[0] == 'a') {
                 return false;
             }
-
             return true;
         });
 
-        $source = fopen(__DIR__ . '/data/source.csv', 'r');
+        $reader = Reader::createFromPath(__DIR__ . '/data/source.csv');
+        $reader->setDelimiter(';');
+        $reader->setEscape('\\');
+        $reader->setEnclosure('"');
+
         $converted_file_name = tempnam(sys_get_temp_dir(), 'csvconverter_test');
-        $target = fopen($converted_file_name, 'w');
-        $converter->convert($source, $target);
-        fclose($source);
-        fclose($target);
+        $writer = Writer::createFromPath($converted_file_name);
+
+        $writer->setDelimiter(';');
+        $writer->setEscape('\\');
+        $writer->setEnclosure('"');
+        $converter->convert($reader, $writer);
 
         $this->assertFileEquals(__DIR__ . '/data/target._one_skipped.csv', $converted_file_name);
+        
+        unset($writer);
         unlink($converted_file_name);
     }
 }
